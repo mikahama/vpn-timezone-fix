@@ -1,0 +1,84 @@
+#!/bin/sh
+
+STATE_FILE="/run/auto-timezone-vpn-guard.state"
+
+vpn_is_active() {
+    # 1. Proton VPN CLI, if available
+    if command -v protonvpn >/dev/null 2>&1; then
+        if protonvpn status 2>/dev/null | grep -Eiq 'connected|status:.*connected'; then
+            return 0
+        fi
+    fi
+
+    # 2. NetworkManager VPN connections, if available
+    if command -v nmcli >/dev/null 2>&1; then
+        if nmcli -t -f TYPE,STATE connection show --active 2>/dev/null \
+            | grep -Eiq '^vpn:activated|^wireguard:activated'; then
+            return 0
+        fi
+    fi
+
+    # 3. WireGuard interfaces
+    if command -v wg >/dev/null 2>&1; then
+        if [ -n "$(wg show interfaces 2>/dev/null)" ]; then
+            return 0
+        fi
+    fi
+
+    # 4. Common VPN interface names
+    if ip -o link show 2>/dev/null \
+        | grep -Eiq 'tun[0-9]|tap[0-9]|wg[0-9]|ppp[0-9]|proton|pvpn|nordlynx|mullvad|tailscale'; then
+        return 0
+    fi
+
+    # 5. Default route going through a VPN-looking interface
+    DEFAULT_IFACE="$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -n 1)"
+    echo "$DEFAULT_IFACE" | grep -Eiq 'tun|tap|wg|ppp|proton|pvpn|vpn' && return 0
+
+    return 1
+}
+
+set_auto_timezone_for_logged_in_users() {
+    VALUE="$1"
+
+    loginctl list-sessions --no-legend 2>/dev/null | while read -r SESSION UID USER REST; do
+        [ -z "$USER" ] && continue
+        [ "$USER" = "gdm" ] && continue
+
+        BUS="unix:path=/run/user/$UID/bus"
+
+        if [ -S "/run/user/$UID/bus" ]; then
+            runuser -u "$USER" -- env DBUS_SESSION_BUS_ADDRESS="$BUS" \
+                gsettings set org.gnome.desktop.datetime automatic-timezone "$VALUE"
+
+            logger -t auto-timezone-vpn-guard "Set automatic-timezone=$VALUE for user $USER"
+        else
+            logger -t auto-timezone-vpn-guard "No D-Bus session bus for user $USER at /run/user/$UID/bus"
+        fi
+    done
+}
+
+if vpn_is_active; then
+    CURRENT="vpn"
+else
+    CURRENT="novpn"
+fi
+
+PREVIOUS="$(cat "$STATE_FILE" 2>/dev/null || true)"
+
+if [ "$CURRENT" = "$PREVIOUS" ]; then
+    exit 0
+fi
+
+echo "$CURRENT" > "$STATE_FILE"
+
+case "$CURRENT" in
+    vpn)
+        logger -t auto-timezone-vpn-guard "VPN detected: disabling GNOME automatic timezone"
+        set_auto_timezone_for_logged_in_users false
+        ;;
+    novpn)
+        logger -t auto-timezone-vpn-guard "No VPN detected: enabling GNOME automatic timezone"
+        set_auto_timezone_for_logged_in_users true
+        ;;
+esac

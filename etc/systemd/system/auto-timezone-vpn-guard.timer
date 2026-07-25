@@ -1,0 +1,9 @@
+[Unit]
+Description=Run automatic timezone VPN guard regularly
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=15
+
+[Install]
+WantedBy=timers.target

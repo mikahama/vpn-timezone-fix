@@ -1,0 +1,9 @@
+Package: vpn-timezone-fix
+Version: 1.0
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: Mika Hämäläinen <mika@mikakalevi.com>
+Depends:
+Description: Fixes automatic timezone when you use VPN
+ Keep automatic timezone enabled (good for traveling), but prevent VPN connection from changing your timezone :-)

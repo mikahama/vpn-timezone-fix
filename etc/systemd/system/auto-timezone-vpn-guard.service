@@ -1,0 +1,6 @@
+[Unit]
+Description=Guard GNOME automatic timezone while VPN is active
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/auto-timezone-vpn-guard
