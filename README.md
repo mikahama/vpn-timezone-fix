@@ -21,7 +21,7 @@ Once installed, this tool runs quietly in the background and checks your connect
 
 ### 2. Install vpn-timezone-fix
 
-   sudo apt install vpn-timezone-fix
+    sudo apt install vpn-timezone-fix
 
 
 ## 🔍 How to Check if It is Working
